@@ -1,8 +1,11 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
+
 require 'yaml'
 require 'erubis'
+
+#require 'pry'
 
 def readconf(filename)
   #reads a yaml file in 'config/vagrant'
@@ -18,19 +21,39 @@ Vagrant.configure("2") do |config|
   @vbox_customize = ["modifyvm", :id, "--memory", "2048"] # set to 2GB mem
 
   config.vm.define :chef do |conf|
+    # box and virtualbox options
     conf.vm.box = @vconf['box']
-    conf.host_name = @vconf['host_name']
-    conf.boot_mode = @vconf['boot_mode'].to_sym
     conf.vm.customize @vbox_customize
 
-    #network:
+    # hostname & bootmode(gui/headless)
+    conf.host_name = @vconf['host_name']
+    conf.boot_mode = @vconf['boot_mode'].to_sym
+
+    # vagrant-omnibus
+    chefv = @vconf['omnibus']['chef_version']
+    chefv = chef_version.to_sym if chef_version == 'latest'
+    conf.omnibus.chef_version chefv
+
+    # chef provisioner
+    if @vconf['chef']
+      config.vm.provision :chef_solo do |chef|
+        chef.cookbooks_path = @vconf['chef']['cookbooks_path']
+        @vconf['chef']['recipes'].each do |res|
+          chef.add_recipe res
+        end
+      end
+    end
+
+    # network:
     conf.vm.network @vconf['net']['mode'].to_sym,
-    @vconf['net']['ip'],
-    netmask: @vconf['net']['host']
+      @vconf['net']['ip'],
+      netmask: @vconf['net']['host']
 
     #ports:
-    conf.vm.forward_port 80, @vconf['port']['http']
-    conf.vm.forward_port 22, @vconf['port']['ssh'], auto: true
+    if @vconf['port']
+      conf.vm.network :forwarded_port, 80, @vconf['port']['http']
+      conf.vm.network :forwarded_port, 22, @vconf['port']['ssh'], auto_correct: true
+    end
 
     #ssh:
     conf.ssh.username = @vconf['ssh']['username']
